@@ -21,6 +21,8 @@
 
 // NOTE: the motion controls assume points are always in fron of robot. i.e. 
 //       the turning angle is between -pi/2 to pi/2
+//       Precision is also not perfect to simplify logic 
+//       robot is considered reached target when x matches (y is not compared)
 
 int signum_double(double val){
     return (0 < val) - (val < 0);
@@ -38,6 +40,8 @@ class Robot{
 		geometry_msgs::Point current_pos; 
         double current_theta = 0;
         double kAngle_threshold;
+        double turn_rate;
+        double linear_rate;
         size_t path_size;
         size_t path_index = 0; // to keep track the current target
 
@@ -51,8 +55,12 @@ class Robot{
             double initial_heading_y = nh.param("initial_y", 5.544);;
             double initial_heading_z = nh.param("initial_z", 0);
             
-            // tuning for - overshoot vs. steady state error
+            // tuning for - overshoot, steady state error
+            // parameters settings from command line not working - weird
+            turn_rate = nh.param("turning_rate", 1.2);
+            linear_rate = nh.param("linear_rate", 1.25);
             kAngle_threshold = nh.param("angle_threshold", M_PI/256);
+
             robot_pub = pub;
             path = p;
             path_size = path.size();
@@ -107,7 +115,7 @@ class Robot{
             // this makes current_theta become 0 (pos x axis)
             double shift = -1 * current_theta;
 
-            // some magic math...
+            // rotation matrix - some magic math...
             double temp_x = delta_x * cos(shift) - delta_y * sin(shift);
             double temp_y = delta_x * sin(shift) + delta_y * cos(shift);
 
@@ -126,7 +134,7 @@ class Robot{
             if(fabs(ang_to_target) > kAngle_threshold) {
 
                 geometry_msgs::Twist t;
-                t.angular.z = signum_double(ang_to_target);
+                t.angular.z = turn_rate * signum_double(ang_to_target);
                 robot_pub.publish(t);
 
             } // if
@@ -139,7 +147,7 @@ class Robot{
                     
                     geometry_msgs::Twist t;
                     // atan > 0 -- turn left, atan < 0 -- turn right
-                    t.linear.x = 1 * signum_double(delta_x);
+                    t.linear.x = linear_rate * signum_double(delta_x);
                     robot_pub.publish(t);
                 }
                 else { // default stall
